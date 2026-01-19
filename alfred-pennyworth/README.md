@@ -1,8 +1,8 @@
-# 🎩 Alfred Pennyworth
+# 🎩 A.L.F.R.E.D. — Adaptive Life Framework for Rest, Energy & Decisions
 
 ## A Proactive, Context-Aware AI Wellness Assistant
 
-Alfred Pennyworth is an **AI-driven personal wellness system** that delivers **high-impact, well-timed, and respectful interventions** to help users improve **nutrition, rest, recovery, and daily performance**.
+Alfred is an **AI-driven personal wellness system** that delivers **high-impact, well-timed, and respectful interventions** to help users improve **nutrition, rest, recovery, and daily performance**.
 
 Unlike typical health apps that overwhelm users with dashboards and notifications, Alfred is built around **decision quality**:
 
@@ -285,5 +285,5 @@ It is **not medical advice** and should not replace professional care.
 
 ## 🎩 Final Note
 
-Alfred Pennyworth is not about *doing more* —
+Alfred is not about *doing more* —
 it’s about **doing the right thing at the right moment**.
