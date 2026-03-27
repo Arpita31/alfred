@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.logging import logger
-from app.api.endpoints import interventions, meals, sleep, activities, calendar, health
+from app.api.endpoints import interventions, meals, sleep, activities, calendar, health, chat
 
 
 @asynccontextmanager
@@ -70,6 +70,11 @@ app.include_router(
     health.router,
     prefix=f"{settings.API_V1_PREFIX}/health",
     tags=["health"]
+)
+app.include_router(
+    chat.router,
+    prefix=f"{settings.API_V1_PREFIX}/chat",
+    tags=["chat"]
 )
 
 

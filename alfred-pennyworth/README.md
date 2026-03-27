@@ -197,6 +197,59 @@ http://localhost:8000/docs
 ## 🧪 Example Decision Flow
 
 1. User logs meals & sleep
+
+---
+
+## 📱 Frontend UI (React + React Native)
+
+### 1. React web
+
+Folder: `frontend-web`
+
+Commands:
+
+- `cd frontend-web && npm install`
+- `npm run dev`
+
+Features included:
+
+- Health status check
+- Generate intervention button
+- Meal/Sleep/Activity logging forms
+- Intervention display card
+
+### 2. React Native mobile
+
+Folder: `frontend-mobile`
+
+Commands:
+
+- `cd frontend-mobile && npm install`
+- `npm run start`
+
+This is an Expo-based app with:
+
+- Health status display
+- Generate intervention button
+- Example data submission for meal/sleep/activity
+
+> Backend API base URL is hard-coded as `http://localhost:8000/api/v1` in both clients.
+
+## 🔧 Where to modify
+
+- Web API wrappers: `frontend-web/src/api.ts`
+- Web app UI: `frontend-web/src/App.tsx`
+- Mobile API wrappers: `frontend-mobile/src/api.ts`
+- Mobile app UI: `frontend-mobile/App.tsx`
+
+## 🧾 Notes
+
+- Ensure backend is running first (`docker-compose up -d`).
+- Use `user_id=1` for initial testing until auth is implemented.
+
+## 🧪 Example Decision Flow
+
+1. User logs meals & sleep
 2. System detects a **4+ hour meal gap**
 3. Confidence exceeds threshold (e.g. 0.85)
 4. Alfred checks:

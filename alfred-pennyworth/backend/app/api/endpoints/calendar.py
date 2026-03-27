@@ -4,7 +4,7 @@ Calendar API endpoint.
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -43,12 +43,12 @@ async def get_upcoming(
     hours: int = 24,
     db: AsyncSession = Depends(get_db)
 ):
-    until = datetime.now() + timedelta(hours=hours)
+    until = datetime.now(timezone.utc) + timedelta(hours=hours)
     result = await db.execute(
         select(CalendarEvent).where(
             and_(
                 CalendarEvent.user_id == user_id,
-                CalendarEvent.start_time >= datetime.now(),
+                CalendarEvent.start_time >= datetime.now(timezone.utc),
                 CalendarEvent.start_time <= until
             )
         )

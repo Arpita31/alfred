@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
     
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://localhost:8000"]
+    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://localhost:4173", "http://localhost:5175", "http://localhost:5178", "http://localhost:8000"]
     
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

@@ -1,7 +1,7 @@
 """
 Alfred Agent Service - Core AI agent using GPT-4.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 import json
 from openai import AsyncOpenAI
@@ -19,7 +19,7 @@ class Signal:
         self.severity = severity
         self.data = data
         self.reasoning = reasoning
-        self.detected_at = datetime.now()
+        self.detected_at = datetime.now(timezone.utc)
     
     def to_dict(self) -> Dict:
         return {
@@ -62,11 +62,15 @@ class AlfredAgent:
         
         context = self._build_context(user_data, signal, user_patterns, recent_interventions)
         intervention = await self._generate_with_gpt4(context, signal)
-            
+
+        if intervention is None:
+            logger.warning(f"GPT-4 generation failed for signal {signal.type}. Using fallback template.")
+            intervention = self._fallback_intervention(signal)
+
         if intervention:
             intervention["signal_type"] = signal.type
             intervention["signal_confidence"] = signal.confidence
-            
+
         return intervention
         
     async def _generate_with_gpt4(self, context: Dict, signal: Signal) -> Optional[Dict]:
@@ -94,79 +98,124 @@ class AlfredAgent:
                 "reasoning": result.get("reasoning", ""),
                 "confidence": result.get("confidence", 0.7),
                 "recommendation_data": result.get("recommendations", {}),
-                "type": signal.type
+                "type": signal.type,
+                "generated_by": "gpt4"
             }
             
         except Exception as e:
-            logger.error(f"Error generating intervention with GPT-4: {e}")
+            logger.error(f"Error generating intervention with GPT-4: {e}", exc_info=True)
             return None
+            
+    def _fallback_intervention(self, signal: Signal) -> Dict:
+        """Generate a safe fallback intervention when GPT is unavailable or returns invalid output."""
+        defaults = {
+            SignalType.MEAL_GAP: {
+                "title": "Time for a nourishing snack",
+                "message": "It has been a while since your last meal; a small balanced snack can help you sustain energy.",
+                "reasoning": "Meal gap detected in your recent eating pattern.",
+                "confidence": 0.75,
+                "recommendation_data": {
+                    "action": "Eat a small protein-rich snack (e.g., yogurt, nuts, hummus with veggies)",
+                    "timing": "Within 30 minutes",
+                    "alternatives": ["Try a piece of fruit and cheese", "Make a smoothie with protein powder"],
+                    "generated_by": "fallback"
+                }
+            },
+            SignalType.LOW_ENERGY: {
+                "title": "Boost your energy gently",
+                "message": "A quick walk and hydrating drink can help recalibrate your energy level.",
+                "reasoning": "Low energy signal detected.",
+                "confidence": 0.70,
+                "recommendation_data": {
+                    "action": "Walk for 10 minutes and drink water",
+                    "timing": "Now",
+                    "alternatives": ["Try a short stretching session", "Have a light snack"],
+                    "generated_by": "fallback"
+                }
+            }
+        }
+
+        generic = {
+            "title": "Wellness check-in",
+            "message": "I recommend a short mindful break and a hydration check.",
+            "reasoning": "Could not fetch a tailored recommendation, so a safe fallback is applied.",
+            "confidence": 0.65,
+            "recommendation_data": {
+                "action": "Take a 5-minute break, stretch, and drink water",
+                "timing": "Next 15 minutes",
+                "alternatives": ["Deep breathing", "Get some fresh air"]
+            },
+            "generated_by": "fallback"
+        }
+
+        return defaults.get(signal.type, generic)
             
     def _get_system_prompt(self) -> str:
         """Get the system prompt defining Alfred's personality."""
         return """You are Alfred Pennyworth, a sophisticated AI wellness assistant.
 
-Your role is to provide intelligent, contextual, and empathetic wellness interventions to help users optimize their nutrition, rest, and performance.
+                Your role is to provide intelligent, contextual, and empathetic wellness interventions to help users optimize their nutrition, rest, and performance.
 
-Key principles:
-1. **Respectful Timing**: Never interrupt during meetings or quiet hours
-2. **Evidence-Based**: Base recommendations on data patterns and scientific principles
-3. **Contextual**: Consider the user's schedule, patterns, and preferences
-4. **Empathetic**: Communicate with warmth and understanding, never judgmental
-5. **Actionable**: Provide specific, practical recommendations
-6. **Transparent**: Explain your reasoning clearly
-7. **Confident**: Only intervene when confidence is high (>70%)
+                Key principles:
+                1. **Respectful Timing**: Never interrupt during meetings or quiet hours
+                2. **Evidence-Based**: Base recommendations on data patterns and scientific principles
+                3. **Contextual**: Consider the user's schedule, patterns, and preferences
+                4. **Empathetic**: Communicate with warmth and understanding, never judgmental
+                5. **Actionable**: Provide specific, practical recommendations
+                6. **Transparent**: Explain your reasoning clearly
+                7. **Confident**: Only intervene when confidence is high (>70%)
 
-Communication style:
-- Warm, professional, and butler-like
-- Brief and to-the-point (2-3 sentences max)
-- Encouraging and supportive
-- Use "I notice" or "I've observed" rather than commands
-- Suggest rather than prescribe
+                Communication style:
+                - Warm, professional, and butler-like
+                - Brief and to-the-point (2-3 sentences max)
+                - Encouraging and supportive
+                - Use "I notice" or "I've observed" rather than commands
+                - Suggest rather than prescribe
 
-Respond in JSON format with:
-{
-  "title": "Brief, engaging title",
-  "message": "2-3 sentence intervention message",
-  "reasoning": "Your analytical reasoning for this intervention",
-  "confidence": 0.0-1.0,
-  "recommendations": {
-    "action": "specific recommendation",
-    "timing": "when to act",
-    "alternatives": ["option 1", "option 2"]
-  }
-}"""
+                Respond in JSON format with:
+                {
+                "title": "Brief, engaging title",
+                "message": "2-3 sentence intervention message",
+                "reasoning": "Your analytical reasoning for this intervention",
+                "confidence": 0.0-1.0,
+                "recommendations": {
+                    "action": "specific recommendation",
+                    "timing": "when to act",
+                    "alternatives": ["option 1", "option 2"]
+                }
+                }"""
         
     def _build_intervention_prompt(self, context: Dict, signal: Signal) -> str:
         """Build the user prompt with context and signal data."""
         return f"""Generate a wellness intervention based on the following:
 
-**SIGNAL DETECTED:**
-Type: {signal.type}
-Confidence: {signal.confidence:.0%}
-Severity: {signal.severity:.0%}
-Data: {json.dumps(signal.data, indent=2)}
-Reasoning: {signal.reasoning}
+                **SIGNAL DETECTED:**
+                Type: {signal.type}
+                Confidence: {signal.confidence:.0%}
+                Severity: {signal.severity:.0%}
+                Data: {json.dumps(signal.data, indent=2)}
+                Reasoning: {signal.reasoning}
 
-**USER CONTEXT:**
-Current Time: {context.get('current_time', 'Unknown')}
-Upcoming Schedule: {json.dumps(context.get('upcoming_events', []), indent=2)}
+                **USER CONTEXT:**
+                Current Time: {context.get('current_time', 'Unknown')}
+                Upcoming Schedule: {json.dumps(context.get('upcoming_events', []), indent=2)}
 
-**PATTERNS:**
-Meal Patterns: {json.dumps(context.get('meal_patterns', {}), indent=2)}
-Sleep Patterns: {json.dumps(context.get('sleep_patterns', {}), indent=2)}
+                **PATTERNS:**
+                Meal Patterns: {json.dumps(context.get('meal_patterns', {}), indent=2)}
+                Sleep Patterns: {json.dumps(context.get('sleep_patterns', {}), indent=2)}
 
-**RECENT INTERVENTIONS:**
-{json.dumps(context.get('recent_interventions', []), indent=2)}
+                **RECENT INTERVENTIONS:**
+                {json.dumps(context.get('recent_interventions', []), indent=2)}
 
-**USER PREFERENCES:**
-{json.dumps(context.get('user_preferences', {}), indent=2)}
+                **USER PREFERENCES:**
+                {json.dumps(context.get('user_preferences', {}), indent=2)}
 
-Generate an appropriate intervention that:
-1. Addresses the detected signal
-2. Respects the user's schedule and preferences
-3. Provides actionable, specific recommendations
-4. Avoids repetition of recent interventions
-5. Maintains Alfred's warm, professional tone"""
+                Generate an appropriate intervention that:
+                1. Addresses the detected signal
+                2. Respects the user's schedule and preferences
+                3. Provides actionable, specific recommendations
+                4. Avoids repetition of recent interventions
+                5. Maintains Alfred's warm, professional tone"""
         
     def _build_context(
         self,
@@ -177,7 +226,7 @@ Generate an appropriate intervention that:
     ) -> Dict:
         """Build context dictionary for AI models."""
         return {
-            "current_time": datetime.now().strftime("%A, %B %d, %Y at %I:%M %p"),
+            "current_time": datetime.now(timezone.utc).strftime("%A, %B %d, %Y at %I:%M %p UTC"),
             "user_preferences": {
                 "timezone": user_data.get("timezone", "UTC"),
                 "dietary_preferences": user_data.get("dietary_preferences", {}),
