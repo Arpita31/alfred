@@ -2,8 +2,12 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   getHealth, createMeal, createSleep, createActivity,
   generateIntervention, submitFeedback, logWater, parseMeal, getMeals,
+  onUnauthorized,
   type NutritionPreview, type ParsedIngredient,
 } from './api';
+import { getToken, getUserId, clearSession } from './auth';
+import LoginPage  from './LoginPage';
+import SignupPage from './SignupPage';
 import WaterTracker from './WaterTracker';
 import ChatAssistant from './ChatAssistant';
 import FinancePage from './FinancePage';
@@ -45,8 +49,6 @@ interface TimelineEvent {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const USER_ID = 1;
 
 const NAV_GROUPS = [
   {
@@ -684,7 +686,7 @@ const METHOD_BADGE: Record<string, string> = {
   ai:       'np-badge--purple',
 };
 
-function NutritionPage({ onSaved }: { onSaved: () => void }) {
+function NutritionPage({ userId, onSaved }: { userId: number; onSaved: () => void }) {
   const [form, setForm] = useState({
     meal_time: '', meal_type: '', description: '', servings: 1,
   });
@@ -744,7 +746,7 @@ function NutritionPage({ onSaved }: { onSaved: () => void }) {
     e.preventDefault();
     setSaving(true);
     const calories  = calOverride ? Number(calOverride) : preview?.calories;
-    await createMeal(USER_ID, {
+    await createMeal(userId, {
       meal_time:  form.meal_time,
       meal_type:  form.meal_type,
       description: form.description,
@@ -1110,7 +1112,7 @@ function mkDefaultSleepForm() {
   return { sleep_time: '23:00', wake_time: wakeT, quality: 7, tags: [] as string[] };
 }
 
-function SleepPage({ onSaved }: { onSaved: (hours: number, quality: number) => void }) {
+function SleepPage({ userId, onSaved }: { userId: number; onSaved: (hours: number, quality: number) => void }) {
   const [history, setHistory] = useState<SleepRecord[]>(loadSleepHistory);
   const [form, setForm]       = useState(mkDefaultSleepForm);
   const [saving, setSaving]   = useState(false);
@@ -1179,7 +1181,7 @@ function SleepPage({ onSaved }: { onSaved: (hours: number, quality: number) => v
   // ── Nap quick-log ─────────────────────────────────────────────────────────
   const logNap = async (minutes: number) => {
     const end = new Date(), start = new Date(end.getTime() - minutes * 60_000);
-    await createSleep(USER_ID, { sleep_start: start.toISOString(), sleep_end: end.toISOString(), quality_score: 6 });
+    await createSleep(userId, { sleep_start: start.toISOString(), sleep_end: end.toISOString(), quality_score: 6 });
     const entry: SleepRecord = {
       date: toLocalDT(end).slice(0, 10), start: start.toISOString(), end: end.toISOString(),
       hours: minutes / 60, quality: 6, score: 50, tags: ['nap'],
@@ -1192,7 +1194,7 @@ function SleepPage({ onSaved }: { onSaved: (hours: number, quality: number) => v
   // ── Submit ────────────────────────────────────────────────────────────────
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    await createSleep(USER_ID, { sleep_start: sleepStart.toISOString(), sleep_end: sleepEnd.toISOString(), quality_score: form.quality });
+    await createSleep(userId, { sleep_start: sleepStart.toISOString(), sleep_end: sleepEnd.toISOString(), quality_score: form.quality });
     const today  = toLocalDT(new Date()).slice(0, 10);
     const entry: SleepRecord = { date: today, start: sleepStart.toISOString(), end: sleepEnd.toISOString(), hours, quality: form.quality, score, tags: form.tags };
     const updated = [entry, ...history.filter(r => r.date !== today)];
@@ -1522,7 +1524,7 @@ function actNextWorkoutSuggestion(history: ActivityRecord[], recovery: { score: 
 
 // ─── Activity Page ────────────────────────────────────────────────────────────
 
-function ActivityPage({ onSaved }: { onSaved: (minutes: number) => void }) {
+function ActivityPage({ userId, onSaved }: { userId: number; onSaved: (minutes: number) => void }) {
   const [history, setHistory]         = useState<ActivityRecord[]>(loadActivityHistory);
   const [smartText, setSmartText]     = useState('');
   const [form, setForm]               = useState({
@@ -1623,7 +1625,7 @@ function ActivityPage({ onSaved }: { onSaved: (minutes: number) => void }) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     const startISO = form.start_time ? new Date(form.start_time).toISOString() : new Date().toISOString();
-    await createActivity(USER_ID, {
+    await createActivity(userId, {
       activity_type: form.activity_type, start_time: startISO,
       duration_minutes: form.duration_minutes, calories_burned: form.calories_burned,
     });
@@ -1853,8 +1855,8 @@ function ActivityPage({ onSaved }: { onSaved: (minutes: number) => void }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ page, status, onNavigate }: {
-  page: Page; status: BackendStatus; onNavigate: (p: Page) => void;
+function Sidebar({ page, status, onNavigate, onLogout }: {
+  page: Page; status: BackendStatus; onNavigate: (p: Page) => void; onLogout: () => void;
 }) {
   const statusLabel = { loading: 'Connecting', healthy: 'Online', error: 'Offline' }[status];
   return (
@@ -1888,6 +1890,12 @@ function Sidebar({ page, status, onNavigate }: {
         <div className={`status-pill ${status}`}>
           <span className="status-dot" />{statusLabel}
         </div>
+        <button
+          onClick={onLogout}
+          style={{ marginTop: 8, width: '100%', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', color: 'var(--text-muted)', fontSize: '0.8rem', cursor: 'pointer' }}
+        >
+          Sign out
+        </button>
       </div>
     </aside>
   );
@@ -1896,6 +1904,31 @@ function Sidebar({ page, status, onNavigate }: {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!getToken());
+  const [userId, setUserId]                   = useState(() => getUserId());
+  const [authPage, setAuthPage]               = useState<'login' | 'signup'>('login');
+
+  // Subscribe to 401s from apiFetch — log the user out automatically
+  useEffect(() => {
+    const unsub = onUnauthorized(() => {
+      clearSession();
+      setIsAuthenticated(false);
+    });
+    return () => { unsub(); };
+  }, []);
+
+  const handleAuthSuccess = (id: number) => { setUserId(id); setIsAuthenticated(true); };
+
+  if (!isAuthenticated) {
+    return authPage === 'login'
+      ? <LoginPage  onSuccess={handleAuthSuccess} onSwitchToSignup={() => setAuthPage('signup')} />
+      : <SignupPage onSuccess={handleAuthSuccess} onSwitchToLogin={()  => setAuthPage('login')}  />;
+  }
+
+  return <AppShell userId={userId} onLogout={() => { clearSession(); setIsAuthenticated(false); }} />;
+}
+
+function AppShell({ userId, onLogout }: { userId: number; onLogout: () => void }) {
   const [page, setPage]               = useState<Page>('dashboard');
   const [status, setStatus]           = useState<BackendStatus>('loading');
   const [toast, setToast]             = useState('');
@@ -1924,7 +1957,7 @@ export default function App() {
     if (insightLoading) return;
     setILoading(true);
     try {
-      const result = await generateIntervention(USER_ID);
+      const result = await generateIntervention(userId);
       if (!(result as any).detail) {
         setInsight(result as Intervention);
         setFeedback(null);
@@ -1974,7 +2007,7 @@ export default function App() {
 
   // Quick 250ml water log (no nav change)
   const onLogWater = useCallback(() => {
-    logWater(USER_ID, 250).catch(() => {});
+    logWater(userId, 250).catch(() => {});
     addTimeline({ icon: '💧', label: 'Water', detail: '250 ml logged', type: 'water' });
     notify('💧 +250 ml logged');
     setStats((s) => ({ ...s, waterStreak: getWaterStreak() }));
@@ -1982,7 +2015,7 @@ export default function App() {
 
   return (
     <div className="layout">
-      <Sidebar page={page} status={status} onNavigate={setPage} />
+      <Sidebar page={page} status={status} onNavigate={setPage} onLogout={onLogout} />
 
       <div className="main-content">
         {toast && <div className="toast-global">{toast}</div>}
@@ -2003,19 +2036,19 @@ export default function App() {
           </div>
         )}
         {page === 'nutrition' && (
-          <NutritionPage onSaved={() => {
+          <NutritionPage userId={userId} onSaved={() => {
             setStats((s) => ({ ...s, mealsToday: s.mealsToday + 1 }));
             addTimeline({ icon: '🍽', label: 'Meal logged', detail: 'Nutrition entry added', type: 'meal' });
           }} />
         )}
         {page === 'sleep' && (
-          <SleepPage onSaved={(hrs, q) => {
+          <SleepPage userId={userId} onSaved={(hrs, q) => {
             setStats((s) => ({ ...s, lastSleepHours: hrs, lastSleepQuality: q }));
             addTimeline({ icon: '🌙', label: `Slept ${hrs}h`, detail: `Quality: ${q}/10`, type: 'sleep' });
           }} />
         )}
         {page === 'activity' && (
-          <ActivityPage onSaved={(min) => {
+          <ActivityPage userId={userId} onSaved={(min) => {
             setStats((s) => ({ ...s, activityMinutesToday: s.activityMinutesToday + min }));
             addTimeline({ icon: '⚡', label: `Activity: ${min} min`, detail: 'Workout logged', type: 'activity' });
           }} />
@@ -2029,7 +2062,7 @@ export default function App() {
       </div>
 
       {/* Floating chat */}
-      <ChatAssistant userId={USER_ID} />
+      <ChatAssistant userId={userId} />
     </div>
   );
 }

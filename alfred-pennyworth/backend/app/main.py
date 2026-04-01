@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.logging import logger
-from app.api.endpoints import interventions, meals, sleep, activities, calendar, health, chat
+from app.api.endpoints import interventions, meals, sleep, activities, calendar, health, chat, auth
 
 
 @asynccontextmanager
@@ -41,6 +41,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(
+    auth.router,
+    prefix=f"{settings.API_V1_PREFIX}/auth",
+    tags=["auth"]
+)
 app.include_router(
     interventions.router,
     prefix=f"{settings.API_V1_PREFIX}/interventions",
