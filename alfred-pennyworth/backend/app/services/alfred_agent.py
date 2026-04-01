@@ -2,6 +2,7 @@
 Alfred Agent Service - Core AI agent using GPT-4.
 """
 from datetime import datetime, timezone
+from enum import Enum
 from typing import List, Dict, Optional
 import json
 from openai import AsyncOpenAI
@@ -12,7 +13,7 @@ from app.core.config import settings
 
 class Signal:
     """Represents a detected signal."""
-    def __init__(self, signal_type: str, confidence: float, severity: float, 
+    def __init__(self, signal_type: "SignalType", confidence: float, severity: float,
                  data: Dict, reasoning: str):
         self.type = signal_type
         self.confidence = confidence
@@ -20,27 +21,27 @@ class Signal:
         self.data = data
         self.reasoning = reasoning
         self.detected_at = datetime.now(timezone.utc)
-    
+
     def to_dict(self) -> Dict:
         return {
-            "type": self.type,
+            "type": self.type.value,
             "confidence": self.confidence,
             "severity": self.severity,
             "data": self.data,
             "reasoning": self.reasoning,
-            "detected_at": self.detected_at.isoformat()
+            "detected_at": self.detected_at.isoformat(),
         }
 
 
-class SignalType:
+class SignalType(str, Enum):
     """Types of signals Alfred can detect."""
-    MEAL_GAP = "meal_gap"
-    LOW_ENERGY = "low_energy"
-    POOR_SLEEP = "poor_sleep"
-    DEHYDRATION = "dehydration"
-    CALENDAR_CONFLICT = "calendar_conflict"
-    RECOVERY_NEEDED = "recovery_needed"
-    STRESS_HIGH = "stress_high"
+    MEAL_GAP           = "meal_gap"
+    LOW_ENERGY         = "low_energy"
+    POOR_SLEEP         = "poor_sleep"
+    DEHYDRATION        = "dehydration"
+    CALENDAR_CONFLICT  = "calendar_conflict"
+    RECOVERY_NEEDED    = "recovery_needed"
+    STRESS_HIGH        = "stress_high"
 
 
 class AlfredAgent:

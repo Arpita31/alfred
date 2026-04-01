@@ -52,7 +52,7 @@ export async function register({ username, email, password }: RegisterParams): P
 
   const data: AuthResponse = await res.json();
   saveToken(data.access_token);
-  saveUserId(data.user_id ?? 1);
+  saveUserId(data.user_id);
   return data;
 }
 
@@ -71,7 +71,7 @@ export async function login({ username, password }: LoginParams): Promise<AuthRe
 
   const data: AuthResponse = await res.json();
   saveToken(data.access_token);
-  saveUserId(data.user_id ?? 1);
+  saveUserId(data.user_id);
   return data;
 }
 

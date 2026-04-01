@@ -43,7 +43,7 @@ function loadFinance(): FinanceState {
   } catch { return DEFAULT_STATE; }
 }
 function saveFinance(s: FinanceState) { localStorage.setItem(FIN_KEY, JSON.stringify(s)); }
-function uid() { return Math.random().toString(36).slice(2, 9); }
+function uid() { return crypto.randomUUID().slice(0, 8); }
 
 // ─── Finance Engine ───────────────────────────────────────────────────────────
 
@@ -115,23 +115,46 @@ function simulatePayoff(liabilities: Liability[], strategy: 'avalanche' | 'snowb
   const order = sorted.map(d => d.id);
   let freedExtra = 0, month = 0, totalInterest = 0;
   const perDebt: Record<string, { payoffMonth: number; interest: number }> = {};
+  const markPaid = (d: typeof sorted[0]) => {
+    d.paid = true;
+    d.balance = 0;
+    perDebt[d.id] = { payoffMonth: month, interest: Math.round(d.interest) };
+    freedExtra += d.minPay;
+  };
+
   while (sorted.some(d => d.balance > 0.01) && month < 600) {
     month++;
-    sorted.forEach(d => { if (d.balance > 0.01) { const int = d.balance * d.rate; d.balance += int; d.interest += int; totalInterest += int; } });
+
+    // Accrue interest
     sorted.forEach(d => {
       if (d.balance > 0.01) {
-        const pay = Math.min(d.balance, d.minPay); d.balance -= pay;
-        if (d.balance <= 0.01 && !d.paid) { d.paid = true; d.balance = 0; perDebt[d.id] = { payoffMonth: month, interest: Math.round(d.interest) }; freedExtra += d.minPay; }
+        const int = d.balance * d.rate;
+        d.balance += int;
+        d.interest += int;
+        totalInterest += int;
       }
     });
-    const totalExtra = extraMonthly + freedExtra;
+
+    // Apply minimum payments
+    sorted.forEach(d => {
+      if (d.balance > 0.01) {
+        const pay = Math.min(d.balance, d.minPay);
+        d.balance -= pay;
+        if (d.balance <= 0.01 && !d.paid) markPaid(d);
+      }
+    });
+
+    // Apply extra payment to the priority target
     const target = sorted.find(d => d.balance > 0.01);
     if (target) {
-      target.balance = Math.max(0, target.balance - totalExtra);
-      if (target.balance <= 0.01 && !target.paid) { target.paid = true; target.balance = 0; perDebt[target.id] = { payoffMonth: month, interest: Math.round(target.interest) }; freedExtra += target.minPay; }
+      target.balance = Math.max(0, target.balance - (extraMonthly + freedExtra));
+      if (target.balance <= 0.01 && !target.paid) markPaid(target);
     }
   }
-  sorted.forEach(d => { if (!perDebt[d.id]) perDebt[d.id] = { payoffMonth: 600, interest: Math.round(d.interest) }; });
+
+  sorted.forEach(d => {
+    if (!perDebt[d.id]) perDebt[d.id] = { payoffMonth: 600, interest: Math.round(d.interest) };
+  });
   return { totalInterest: Math.round(totalInterest), totalMonths: month, perDebt, order };
 }
 

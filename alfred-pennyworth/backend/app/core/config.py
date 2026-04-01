@@ -9,10 +9,10 @@ import json
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
     APP_NAME: str = "Alfred Pennyworth"
     ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     SECRET_KEY: str = Field(..., min_length=32)
     
     API_V1_PREFIX: str = "/api/v1"
@@ -91,9 +91,7 @@ class Settings(BaseSettings):
         # Fallback to default
         return ["http://localhost:3000", "http://localhost:8000"]
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {"env_file": ".env", "case_sensitive": True}
 
 
 settings = Settings()

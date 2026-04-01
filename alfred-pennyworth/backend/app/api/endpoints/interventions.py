@@ -196,9 +196,9 @@ async def generate_intervention(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+        logger.error(f"Error generating intervention: {e}", exc_info=True)
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate intervention")
 
 
 @router.get("/", response_model=List[InterventionResponse])
